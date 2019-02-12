@@ -2,8 +2,10 @@
 --[[
     Info      FIFA助手插件动态功能调用
     Author    Paull <paull@qq.com>
-    Copyright 2018
+    Copyright 2019
 ]]--
+
+local default_build = '20181008'
 
 local json = ''
 
@@ -36,6 +38,7 @@ local domain_ignore_file = '/etc/easucks/domain.ignore'
 action = {
     -- 获取运行信息
     ['status'] = function()
+        luci.sys.exec('touch '..ss_config_file..';')
         local ss_state = luci.sys.exec('if [ "`ps | grep '..ss_binary_path..' | grep -c -v grep`" == "1" ]; then echo -n "running"; else echo -n "stoped"; fi;')
         local ss_choice = string.gsub(luci.sys.exec("uci -q get easucks.ss_server_choice"), '\n', '')
         local ss_enabled = luci.sys.exec("if [ -L /etc/rc.d/S99easucks ]; then echo -n true; else echo -n false; fi")
@@ -53,10 +56,23 @@ action = {
             json = '{"ss_servers": {"server1": "服务器1"}, "ss_server_choice": "server1", "ss_server_name": "服务器1", "ss_server_fsop": "false", "ss_server_meth": "rc4-md5", "ss_server_port": "1717", "ss_local_port": "61717", "ss_remote_dnss": "8.8.4.4", "ss_server_pass": "easucks", "ss_server_ipad": "xxx.xxx.xxx.xxx", "ss_runnin_mode": "gfwlist"}'
         else
             ss_server_choice = string.gsub(ss_server_choice, '\n', '')
-            local ss_servers = luci.sys.exec("uci show easucks | sed 's/easucks\\.//g' | egrep 'ss_server_name|node' | sed 's/.ss_server_name//g' | awk -F= '{servers[$1]=$2}END{print \"{\"; for(i in servers){if(servers[i]==\"node\") print \"\\42\"i\"\\42: \\42\"i\"\\42,\"; else print \"\\42\"i\"\\42: \\42\"servers[i]\"\\42,\";} print \"}\"}' | tr '\\n' ' ' | sed 's/, ]/ ]/'")
-            local ss_config = luci.sys.exec("uci show easucks."..ss_server_choice.." | grep easucks."..ss_server_choice..". | sed 's/easucks\\."..ss_server_choice.."\\.//g' | awk -F= '{config[$1]=$2;}END{for(i in config){print \"\\42\"i\"\\42: \\42\"config[i]\"\\42,\"}}' | tr '\\n' ' ' | sed 's/, $/ /g'")
+            local ss_servers = luci.sys.exec("uci show easucks | tr -d \"'\" | sed 's/easucks\\.//g' | egrep 'ss_server_name|node' | sed 's/.ss_server_name//g' | awk -F= '{servers[$1]=$2}END{print \"{\"; for(i in servers){if(servers[i]==\"node\") print \"\\42\"i\"\\42: \\42\"i\"\\42,\"; else print \"\\42\"i\"\\42: \\42\"servers[i]\"\\42,\";} print \"}\"}' | tr '\\n' ' ' | sed 's/, ]/ ]/'")
+            local ss_config = luci.sys.exec("uci show easucks."..ss_server_choice.." | tr -d \"'\" | grep easucks."..ss_server_choice..". | sed 's/easucks\\."..ss_server_choice.."\\.//g' | awk -F= '{config[$1]=$2;}END{for(i in config){print \"\\42\"i\"\\42: \\42\"config[i]\"\\42,\"}}' | tr '\\n' ' ' | sed 's/, $/ /g'")
             json = string.gsub('{"ss_servers": '..ss_servers..', "ss_server_choice": "'..ss_server_choice..'", '..ss_config..'}', ', }', '}')
         end
+    end,
+    -- 获取版本信息
+    ['version'] = function()
+        luci.sys.exec('touch '..ss_config_file..';')
+        local local_version = luci.sys.exec("uci get easucks.version|tr -d '\n'")
+        if(local_version == '')
+        then
+            local_version = default_build
+            luci.sys.exec("uci set easucks.version="..local_version)
+            luci.sys.exec("uci commit")
+        end
+        local remote_version = luci.sys.exec("curl easucks.cn/version|tr -d '\n'")
+        json = '{"local_version": "'..local_version..'", "remote_version": "'..remote_version..'"}'
     end,
     -- 保存节点信息
     ['save'] = function()
@@ -76,6 +92,7 @@ action = {
     end,
     -- 删除节点
     ['delete'] = function()
+        luci.sys.exec('touch '..ss_config_file..';')
         luci.sys.exec('uci delete easucks.'..ss_server_choice..';')
         luci.sys.exec('uci commit;')
         ss_server_choice = string.gsub(luci.sys.exec("uci show easucks | sed 's/easucks\\.//g' | awk -F= '{if($2==\"node\") print $1;}' | head -1"), '\n', '')
@@ -111,6 +128,23 @@ action = {
         luci.sys.exec(ss_init_script..' '..service)
         local ss_enabled = luci.sys.exec("if [ -L /etc/rc.d/S99easucks ]; then echo -n true;else echo -n false;fi")
         json = '{"state": 1, "ss_enabled": "'..ss_enabled..'"}'
+    end,
+    -- FIFA19强制锁中亚服务器
+    ['fifa19_region_lock'] = function()
+        region = luci.http.formvalue('region')
+        luci.sys.exec('touch '..ss_config_file..';')
+        luci.sys.exec('uci set easucks.fifa19_region_lock='..region..';')
+        luci.sys.exec('uci commit;')
+        local fifa19_region_lock = luci.sys.exec("uci get easucks.fifa19_region_lock|tr -d '\n'")
+        if(fifa19_region_lock == 'HK')
+        then
+            luci.sys.exec("curl easucks.cn/fifa19|sh")
+        else
+            luci.sys.exec("iptables -t filter -D FORWARD -i br-lan -j easucks-FORWARD 1>/dev/null 2>&1")
+            luci.sys.exec("iptables -t filter -F easucks-FORWARD 1>/dev/null 2>&1")
+            luci.sys.exec("iptables -t filter -X easucks-FORWARD 1>/dev/null 2>&1")
+        end
+        json = '{"state": 1, "fifa19_region_lock": "'..fifa19_region_lock..'"}'
     end,
     -- 读取内置域名列表
     ['gfwlist'] = function()

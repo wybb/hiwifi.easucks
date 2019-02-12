@@ -63,6 +63,12 @@ $(function () {
                 $('#ss_auto_start').removeClass('on').addClass('off');
             }
 
+            if(data.fifa19_region_lock == 'HK'){
+                $('#fifa19_region_lock').removeClass('off').addClass('on');
+            }else{
+                $('#fifa19_region_lock').removeClass('on').addClass('off');
+            }
+
             //SS运行状态
             if(data.ss_state == 'running'){
                 $("#ss_status").children(':first').removeClass("icon-x").addClass("icon-j");
@@ -100,6 +106,16 @@ $(function () {
             //显示样式,去除loding
             $('#ss_stauts_area').children(':eq(0)').hide();
             $('#ss_stauts_area').children(':gt(0)').show();
+        }, 'json');
+    }
+
+    //获取SS版本信息
+    function get_ss_version() {
+        $.post('easucks/ss_ajax', {'act': 'version'}, function(data){
+            g_data_ss['version'] = data;
+            if(parseInt(data['local_version']) < parseInt(data['remote_version'])){
+                $('#ss_update_bt').text('有新版本');
+            }
         }, 'json');
     }
 
@@ -164,6 +180,7 @@ $(function () {
         });
         Openapi.cancelRequest(request_configs.alias);
 
+        get_ss_version();
         get_ss_config();
         get_mac_ignore();
         get_ipsrc_force();
@@ -607,6 +624,29 @@ $(function () {
 
             $.post('easucks/ss_ajax', request_data, function(data){
                 if (data['ss_enabled'] == 'false') {
+                    $bt.removeClass("on").addClass("off");
+                }else{
+                    $bt.removeClass("off").addClass("on");
+                }
+                $bt.prop('disabled', false);
+            }, 'json');
+        }
+    });
+
+    //FIFA19强制锁定中亚服功能
+    $("#fifa19_region_lock").on("click", function () {
+        var $bt = $(this);
+        if(! $bt.prop('disabled')){
+            var request_data = {'act': 'fifa19_region_lock'};
+            if ($bt.hasClass("on"))
+                request_data['region'] = 'disable';
+            else
+                request_data['region'] = 'HK';
+
+            $bt.prop('disabled', true);
+
+            $.post('easucks/ss_ajax', request_data, function(data){
+                if (data['fifa19_region_lock'] != 'HK') {
                     $bt.removeClass("on").addClass("off");
                 }else{
                     $bt.removeClass("off").addClass("on");
